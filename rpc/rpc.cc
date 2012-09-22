@@ -613,17 +613,16 @@ void
 rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		char *b, int sz)
 {
-	return;
+	// return;
 
 	reply_t new_reply = reply_t(xid);
 	new_reply.buf = b;
 	new_reply.sz = sz;
 	new_reply.xid = xid;
+	std::list<reply_t>::iterator it;
 
 	ScopedLock rwl(&reply_window_m_);
 	assert(reply_window_.count(clt_nonce) != 0);
-
-	std::list<reply_t>::iterator it;
 
 	// insert at proper position in window
 	for (it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
@@ -631,13 +630,13 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		if (it_xid > xid)
 		{
 			reply_window_[clt_nonce].insert(it, new_reply);
-			DEBUG_PRINT(("Just inserted %u before %u into Client %u's Window", new_reply.xid, it_xid, clt_nonce));
+			jsl_log(JSL_DBG_2, "Just inserted %u before %u into Client %u's Window", new_reply.xid, it_xid, clt_nonce);
 			return;
 		}
 	}
 
 	reply_window_[clt_nonce].push_back(new_reply);
-	DEBUG_PRINT(("Just appended %u into Client %u's Window", new_reply.xid, clt_nonce));
+	jsl_log(JSL_DBG_2, "Just appended %u into Client %u's Window", new_reply.xid, clt_nonce);
 
 }
 
@@ -645,13 +644,14 @@ rpcs::rpcstate_t
 rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 		unsigned int xid_rep, char **b, int *sz)
 {
-	return NEW;
+	// return NEW;
 
 	std::list<reply_t>::iterator it;
 
 	ScopedLock rwl(&reply_window_m_);
 	assert(reply_window_.count(clt_nonce) != 0);
 
+	
 	if (reply_window_[clt_nonce].empty())
 		return NEW;
 
