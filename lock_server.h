@@ -5,6 +5,7 @@
 #define lock_server_h
 
 #include <string>
+#include "common.h"
 #include "lock_protocol.h"
 #include "lock_client.h"
 #include "rpc.h"
@@ -25,13 +26,13 @@ public:
  	~lock_server() {};
  	inline void serverFatalError(const char* call) { 
  		perror(call); 
- 		printf("Server thread %d exited because of previous error\n", getpid()); 
+ 		fprintf(stderr, "Server thread %d exited because of previous error\n", getpid()); 
  		exit(-1); 
  	};
 
  	inline void serverWarning(const char* call) { 
  		perror(call); 
- 		printf("Warning: unexpeced error occurred in server thread %d \n", getpid()); 
+ 		fprintf(stderr, "Warning: unexpeced error occurred in server thread %d \n", getpid()); 
  	};
 
  	lock_protocol::status stat(int clt, lock_protocol::lockid_t lid, int &);
