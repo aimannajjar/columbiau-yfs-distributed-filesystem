@@ -5,6 +5,8 @@
 #define lock_server_h
 
 #include <string>
+#include <stdio.h>
+#include <stdlib.h>
 #include "common.h"
 #include "lock_protocol.h"
 #include "lock_client.h"
