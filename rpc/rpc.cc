@@ -72,6 +72,7 @@
 
 #include "jsl_log.h"
 #include "gettime.h"
+#include "common.h"
 
 const rpcc::TO rpcc::to_max = { 120000 };
 const rpcc::TO rpcc::to_min = { 1000 };
@@ -598,7 +599,7 @@ rpcs::dispatch(djob_t *j)
 			c->send(b1, sz1);
 			break;
 		case FORGOTTEN: //very old request and we don't have the response anymore
-			jsl_log(JSL_DBG_2, "rpcs::dispatch: very old request %u from %u\n", 
+			jsl_log(JSL_DBG_1, "rpcs::dispatch: very old request %u from %u\n", 
 					h.xid, h.clt_nonce);
 			rh.ret = rpc_const::atmostonce_failure;
 			rep.pack_reply_header(rh);
@@ -612,7 +613,69 @@ void
 rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		char *b, int sz)
 {
+	// return;
+
+	reply_t new_reply = reply_t(xid);
+	new_reply.buf = b;
+	new_reply.sz = sz;
+	new_reply.xid = xid;
+
 	ScopedLock rwl(&reply_window_m_);
+	assert(reply_window_.count(clt_nonce) != 0);
+
+	std::list<reply_t>::iterator it;
+
+	// insert at proper position in window
+	for (it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
+		unsigned long int it_xid = it->xid;
+		if (it_xid > xid)
+		{
+			reply_window_[clt_nonce].insert(it, new_reply);
+			DEBUG_PRINT(("Just inserted %u before %u into Client %u's Window", new_reply.xid, it_xid, clt_nonce));
+			return;
+		}
+	}
+
+	reply_window_[clt_nonce].push_back(new_reply);
+	DEBUG_PRINT(("Just appended %u into Client %u's Window", new_reply.xid, clt_nonce));
+
+}
+
+rpcs::rpcstate_t 
+rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
+		unsigned int xid_rep, char **b, int *sz)
+{
+	// return NEW;
+
+	std::list<reply_t>::iterator it;
+
+	ScopedLock rwl(&reply_window_m_);
+	assert(reply_window_.count(clt_nonce) != 0);
+
+	if (reply_window_[clt_nonce].empty())
+		return NEW;
+
+	// we've received an ack of a greater xid before, we've definitely forgotten this one..
+	if (xid < reply_window_[clt_nonce].front().xid)
+		return FORGOTTEN;
+
+	// this xid is inside our window
+	if (xid <= reply_window_[clt_nonce].back().xid)
+	{
+
+		// this xid acks the receipt of xid_rep, let's forget older replies (slide window)
+		while (! reply_window_[clt_nonce].empty() && reply_window_[clt_nonce].front().xid <= xid_rep)
+		{
+			struct reply_t r = reply_window_[clt_nonce].front();
+			free(r.buf);
+			reply_window_[clt_nonce].pop_front();
+		}
+
+		return DONE;
+	}
+
+	// we've never seen this xid
+	return NEW;
 }
 
 void
@@ -631,14 +694,6 @@ rpcs::free_reply_window(void)
 	reply_window_.clear();
 }
 
-rpcs::rpcstate_t 
-rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
-		unsigned int xid_rep, char **b, int *sz)
-{
-	ScopedLock rwl(&reply_window_m_);
-
-	return NEW;
-}
 
 //rpc handler
 int 
