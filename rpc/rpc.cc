@@ -626,7 +626,7 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 
 	// insert at proper position in window
 	for (it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
-		unsigned long int it_xid = it->xid;
+		unsigned int it_xid = it->xid;
 		if (it_xid > xid)
 		{
 			reply_window_[clt_nonce].insert(it, new_reply);
