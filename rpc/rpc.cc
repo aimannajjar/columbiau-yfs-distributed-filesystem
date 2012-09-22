@@ -599,7 +599,7 @@ rpcs::dispatch(djob_t *j)
 			c->send(b1, sz1);
 			break;
 		case FORGOTTEN: //very old request and we don't have the response anymore
-			jsl_log(JSL_DBG_1, "** rpcs::dispatch: very old request %u from %u\n", 
+			jsl_log(JSL_DBG_2, "rpcs::dispatch: very old request %u from %u\n", 
 					h.xid, h.clt_nonce);
 			rh.ret = rpc_const::atmostonce_failure;
 			rep.pack_reply_header(rh);
@@ -625,7 +625,7 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 	while (it != reply_window_[clt_nonce].end() && it->xid != xid)
 		it++;
 	
-	jsl_log(JSL_DBG_1, "** rpcs:add_reply: found placeholder for xid %u's (placeholder's xid: %u, sz: %d) in client %u's window, current window size: %d\n", 
+	jsl_log(JSL_DBG_4, "rpcs:add_reply: found placeholder for xid %u's (placeholder's xid: %u, sz: %d) in client %u's window, current window size: %d\n", 
 		xid, it->xid, it->sz, clt_nonce, (int)reply_window_[clt_nonce].size());
 
 
@@ -636,7 +636,7 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 	it->buf = b;
 	it->sz = sz;
 	
-	jsl_log(JSL_DBG_1, "** rpcs:add_reply: just populated xid %u's placeholder in client %u's Window, current window size: %d\n", 
+	jsl_log(JSL_DBG_4, "rpcs:add_reply: just populated xid %u's placeholder in client %u's Window, current window size: %d\n", 
 		it->xid, clt_nonce, (int)reply_window_[clt_nonce].size());
 
 }
@@ -654,7 +654,7 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 
 	if (reply_window_[clt_nonce].empty())
 	{
-		jsl_log(JSL_DBG_1, "** rpcs::checkduplicate_and_update Client %u's reply_window is empty (size: %d). Return NEW\n",
+		jsl_log(JSL_DBG_4, "rpcs::checkduplicate_and_update client %u's reply_window is empty (size: %d). Return NEW\n",
 			 clt_nonce, (int)reply_window_[clt_nonce].size());
 
 		// this is a new request, we'll create a placeholder for in the client's window and mark it as inprogress
@@ -669,7 +669,7 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 	if (xid >= reply_window_[clt_nonce].front().xid && xid <= reply_window_[clt_nonce].back().xid)
 	{
 
-		jsl_log(JSL_DBG_1, "** rpcs::checkduplicate_and_update Client %u's reply_window greatest unack'ed xid is %u and this request's xid is %u and it acknowledges xid %d (window size: %d)\n", 
+		jsl_log(JSL_DBG_4, "rpcs::checkduplicate_and_update client %u's reply_window greatest unack'ed xid is %u and this request's xid is %u and it acknowledges xid %d (window size: %d)\n", 
 			clt_nonce, reply_window_[clt_nonce].back().xid, xid, xid_rep, (int)reply_window_[clt_nonce].size());				
 
 
@@ -683,7 +683,7 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 			// we leave at least one (xid_rep) so we don't end up with an empty window
 			if (it->xid < xid_rep)
 			{
-				jsl_log(JSL_DBG_1, "** rpcs::checkduplicate_and_update removing xid %u (sz: %d) from client %u's reply_window \n", it->xid, it->sz, clt_nonce);
+				jsl_log(JSL_DBG_4, "rpcs::checkduplicate_and_update removing xid %u (sz: %d) from client %u's reply_window \n", it->xid, it->sz, clt_nonce);
 				i++;
 				free(it->buf);
 				reply_window_[clt_nonce].erase(it++);
@@ -693,7 +693,7 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 		}
 
 
-		jsl_log(JSL_DBG_1, "** rpcs::checkduplicate_and_update removed %d old replies from Client %u's reply_window (lower bound: %u, upper bound: %u, new window size: %d)\n",
+		jsl_log(JSL_DBG_4, "rpcs::checkduplicate_and_update removed %d old replies from Client %u's reply_window (lower bound: %u, upper bound: %u, new window size: %d)\n",
 			 i, clt_nonce, reply_window_[clt_nonce].front().xid, reply_window_[clt_nonce].back().xid, (int)reply_window_[clt_nonce].size());
 
 
@@ -701,11 +701,11 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 			goto newxid; 
 
 		// Is this reply ready yet?
-		jsl_log(JSL_DBG_1, "** rpcs::checkduplicate_and_update found placeholder for xid %u (placeholder's xid is: %u, sz: %d)\n", xid, it->xid, it->sz);		
+		jsl_log(JSL_DBG_4, "rpcs::checkduplicate_and_update found placeholder for xid %u (placeholder's xid is: %u, sz: %d)\n", xid, it->xid, it->sz);		
 		if (it->sz == -1)
 			return INPROGRESS; // not yet..
 
-		jsl_log(JSL_DBG_1, "** rpcs::checkduplicate_and_update found existing reply for xid %u\n", it->xid);
+		jsl_log(JSL_DBG_4, "rpcs::checkduplicate_and_update found existing reply for xid %u\n", it->xid);
 
 		// Point to existing reply
 		*b = it->buf;
@@ -716,7 +716,7 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 	// This xid WAS in my window
 	else if (xid < reply_window_[clt_nonce].front().xid)
 	{
-		jsl_log(JSL_DBG_1, "** rpcs::checkduplicate_and_update Client %u's reply_window smallest unack'ed xid is %u whereas this request's xid is %u, (size: %d)\n", clt_nonce, reply_window_[clt_nonce].front().xid, 
+		jsl_log(JSL_DBG_4, "rpcs::checkduplicate_and_update Client %u's reply_window smallest unack'ed xid is %u whereas this request's xid is %u, (size: %d)\n", clt_nonce, reply_window_[clt_nonce].front().xid, 
 			xid, (int)reply_window_[clt_nonce].size());		
 		return FORGOTTEN;
 	}
@@ -725,7 +725,7 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 
 newxid:
 	// we've never seen this xid before
-	jsl_log(JSL_DBG_1, "** rpcs::checkduplicate_and_update we've never seen this xid %u in Client %u's window before.\n", 
+	jsl_log(JSL_DBG_4, "rpcs::checkduplicate_and_update we've never seen this xid %u in Client %u's window before.\n", 
 		 xid, clt_nonce);
 
 	// this is a new request, we'll create a placeholder for in the client's window and mark it as inprogress
@@ -739,14 +739,14 @@ newxid:
 		if (it_xid > xid)
 		{
 			reply_window_[clt_nonce].insert(it, new_reply);
-			jsl_log(JSL_DBG_1, "** rpcs:checkduplicate_and_update: just inserted a placeholder for xid %u before %u into Client %u's Window. New size: %d\n", 
+			jsl_log(JSL_DBG_4, "rpcs:checkduplicate_and_update: just inserted a placeholder for xid %u before %u into Client %u's Window. New size: %d\n", 
 				new_reply.xid, it_xid, clt_nonce, (int)reply_window_[clt_nonce].size());
 			return NEW;
 		}
 	}
 
 	reply_window_[clt_nonce].push_back(new_reply);
-	jsl_log(JSL_DBG_1, "** rpcs:checkduplicate_and_update: just appended a placeholder for xid %u into Client %u's Window. New size: %d\n", 
+	jsl_log(JSL_DBG_4, "rpcs:checkduplicate_and_update: just appended a placeholder for xid %u into Client %u's Window. New size: %d\n", 
 		new_reply.xid, clt_nonce, (int)reply_window_[clt_nonce].size());
 
 
