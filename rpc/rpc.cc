@@ -599,7 +599,7 @@ rpcs::dispatch(djob_t *j)
 			c->send(b1, sz1);
 			break;
 		case FORGOTTEN: //very old request and we don't have the response anymore
-			jsl_log(JSL_DBG_1, "rpcs::dispatch: very old request %u from %u\n", 
+			jsl_log(JSL_DBG_1, "** rpcs::dispatch: very old request %u from %u\n", 
 					h.xid, h.clt_nonce);
 			rh.ret = rpc_const::atmostonce_failure;
 			rep.pack_reply_header(rh);
@@ -630,13 +630,15 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		if (it_xid > xid)
 		{
 			reply_window_[clt_nonce].insert(it, new_reply);
-			jsl_log(JSL_DBG_1, "** Just inserted %u before %u into Client %u's Window\n", new_reply.xid, it_xid, clt_nonce);
+			jsl_log(JSL_DBG_1, "** rpcs:add_reply: Just inserted %u before %u into Client %u's Window. New size: %d\n", 
+				new_reply.xid, it_xid, clt_nonce, (int)reply_window_[clt_nonce].size());
 			return;
 		}
 	}
 
 	reply_window_[clt_nonce].push_back(new_reply);
-	jsl_log(JSL_DBG_1, "^^ Just appended %u into Client %u's Window\n", new_reply.xid, clt_nonce);
+	jsl_log(JSL_DBG_1, "** rpcs:add_reply: Just appended %u into Client %u's Window. New size: %d\n", 
+		new_reply.xid, clt_nonce, (int)reply_window_[clt_nonce].size());
 
 }
 
@@ -672,7 +674,8 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 			reply_window_[clt_nonce].pop_front();
 			i++;
 		}
-		jsl_log(JSL_DBG_1, "rpcs::checkduplicate_and_update removed %d old replies from Client %u's reply_window\n", i, clt_nonce);
+		jsl_log(JSL_DBG_1, "rpcs::checkduplicate_and_update removed %d old replies from Client %u's reply_window. New size: %d\n",
+			 i, clt_nonce, (int)reply_window_[clt_nonce].size());
 		return DONE;
 	}
 
