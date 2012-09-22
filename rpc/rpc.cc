@@ -613,7 +613,7 @@ void
 rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		char *b, int sz)
 {
-	return;
+	// return;
 
 	reply_t new_reply = reply_t(xid);
 	new_reply.buf = b;
@@ -644,7 +644,7 @@ rpcs::rpcstate_t
 rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 		unsigned int xid_rep, char **b, int *sz)
 {
-	return NEW;
+	// return NEW;
 
 	std::list<reply_t>::iterator it;
 
@@ -664,13 +664,15 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 	{
 
 		// this xid acks the receipt of xid_rep, let's forget older replies (slide window)
+		int i = 0;
 		while (! reply_window_[clt_nonce].empty() && reply_window_[clt_nonce].front().xid <= xid_rep)
 		{
 			struct reply_t r = reply_window_[clt_nonce].front();
 			free(r.buf);
 			reply_window_[clt_nonce].pop_front();
+			i++;
 		}
-
+		jsl_log(JSL_DBG_1, "rpcs::checkduplicate_and_update removed %d old replies from Client %u's reply_window\n", i, clt_nonce);
 		return DONE;
 	}
 
