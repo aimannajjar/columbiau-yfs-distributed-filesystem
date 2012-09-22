@@ -6,6 +6,13 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
+#ifdef DEBUG
+# define DEBUG_PRINT(x) printf x
+#else
+# define DEBUG_PRINT(x) do {} while (0)
+#endif
+
+
 pthread_mutex_t lock_server::ltable_m = PTHREAD_MUTEX_INITIALIZER;
 
 lock_server::lock_server():
