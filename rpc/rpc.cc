@@ -625,8 +625,18 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 	assert(reply_window_.count(clt_nonce) != 0);
 
 	// insert at proper position in window
+	for (it = reply_window_[clt_nonce].begin(); it != reply_window_[clt_nonce].end(); it++) {
+		unsigned long int it_xid = it->xid;
+		if (it_xid > xid)
+		{
+			reply_window_[clt_nonce].insert(it, new_reply);
+			jsl_log(JSL_DBG_1, "** Just inserted %u before %u into Client %u's Window\n", new_reply.xid, it_xid, clt_nonce);
+			return;
+		}
+	}
+
 	reply_window_[clt_nonce].push_back(new_reply);
-	jsl_log(JSL_DBG_2, "Just appended %u into Client %u's Window\n", new_reply.xid, clt_nonce);
+	jsl_log(JSL_DBG_1, "^^ Just appended %u into Client %u's Window\n", new_reply.xid, clt_nonce);
 
 }
 
