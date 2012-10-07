@@ -1,0 +1,9 @@
+{
+	"folders":
+	[
+		{
+			"path": "./",
+			"file_exclude_patterns": ["*.d", "*.dSYM", "extent_server", "yfs_client"]
+		}
+	]
+}
