@@ -35,6 +35,8 @@ class yfs_client {
   static std::string filename(inum);
   static inum n2i(std::string);
  public:
+  static uint32_t i2f(inum); // converts a 64-bit inum to 32-bit fuse id
+  static inum f2i(uint32_t); // converts a 32-bit fuse id to 64-bit inum
 
   yfs_client(std::string, std::string);
 
@@ -43,6 +45,11 @@ class yfs_client {
 
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);
+
+  int getdircontents(inum, std::vector<dirent>);
+  int lookup(inum, const char*, inum&);
+
+  int createdir(inum, const char*);
 };
 
 #endif 

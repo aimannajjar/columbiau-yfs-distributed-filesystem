@@ -14,6 +14,17 @@ extent_server::extent_server() {}
 int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 {
   store[id] = buf;
+  if (attr_store.count(id) == 0)
+  { 
+      extent_protocol::attr nattr;
+      nattr.ctime = std::time(0);
+      attr_store[id] = nattr;
+    }
+
+    attr_store[id].size = buf.size();
+    attr_store[id].atime = std::time(0);
+    attr_store[id].mtime = std::time(0);
+
   return extent_protocol::OK;
 }
 
@@ -25,13 +36,19 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
 
 int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr &a)
 {
-  // You replace this with a real implementation. We send a phony response
-  // for now because it's difficult to get FUSE to do anything (including
-  // unmount) if getattr fails.
   a.size = 0;
   a.atime = 0;
   a.mtime = 0;
   a.ctime = 0;
+
+  if (attr_store.count(id) > 0)
+  {
+    a.size = attr_store[id].size;
+    a.atime = attr_store[id].atime;
+    a.mtime = attr_store[id].mtime;
+    a.ctime = attr_store[id].ctime;
+  }
+
   return extent_protocol::OK;
 }
 

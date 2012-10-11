@@ -127,7 +127,13 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
 {
 	e->attr_timeout = 0.0;
   e->entry_timeout = 0.0;
-  // You fill this in
+  
+  printf("Creating node\n\tparent: %lu\n\tname: %s\n", parent, name);
+  printf("\tparam.ino: %lu\n\tparam.generation: %lu\n", e->ino, e->generation);
+  printf("\tmode: %d\n", e->attr.st_mode);
+  printf("\n");
+
+
   return yfs_client::NOENT;
 }
 
@@ -166,19 +172,33 @@ void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent,
 void
 fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+
+  
+  
   struct fuse_entry_param e;
   bool found = false;
 
   e.attr_timeout = 0.0;
   e.entry_timeout = 0.0;
 
+
   // You fill this in:
   // Look up the file named `name' in the directory referred to by
   // `parent' in YFS. If the file was found, initialize e.ino and
   // e.attr appropriately.
+  yfs_client::inum inum;
+  yfs_client::status ret = yfs->lookup(yfs_client::f2i(parent), name, inum);
 
-  if (found)
+  if (ret == yfs_client::OK)
+  {
+    // get target attributes
+    struct stat st;
+    getattr(inum, st);
+
+    e.ino = yfs_client::f2i(inum);
+    e.attr = st;
     fuse_reply_entry(req, &e);
+  }
   else
     fuse_reply_err(req, ENOENT);
 }
@@ -261,6 +281,9 @@ fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   struct fuse_entry_param e;
 
+  yfs->createdir(parent, name);
+
+
   // You fill this in
 #if 0
   fuse_reply_entry(req, &e);
@@ -302,6 +325,9 @@ main(int argc, char *argv[])
   char *mountpoint = 0;
   int err = -1;
   int fd;
+
+
+  srand(time(0));
 
   setvbuf(stdout, NULL, _IONBF, 0);
 
