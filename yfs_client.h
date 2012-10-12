@@ -46,10 +46,11 @@ class yfs_client {
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);
 
-  int getdircontents(inum, std::vector<dirent>);
+  int getdircontents(inum, std::vector<dirent>&);
   int lookup(inum, const char*, inum&);
 
-  int createdir(inum, const char*);
+  int createdir(inum, const char*, inum&);
+  int createnode(inum, const char*, inum&);
 };
 
 #endif 
