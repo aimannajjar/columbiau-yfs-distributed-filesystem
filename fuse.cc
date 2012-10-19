@@ -83,7 +83,7 @@ fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set
 {
   printf("fuseserver_setattr 0x%x\n", to_set);
   if (FUSE_SET_ATTR_SIZE & to_set) {
-    printf("   fuseserver_setattr set size to %ld\n", attr->st_size);
+    printf("   fuseserver_setattr set size to %llu\n", attr->st_size);
     struct stat st;
     // You fill this in
 #if 0
@@ -147,7 +147,7 @@ fuseserver_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   struct fuse_entry_param e;
   yfs_client::status ret;
   if( (ret = fuseserver_createhelper( parent, name, mode, &e )) == yfs_client::OK ) {
-    printf("I'm here!\n");
+    printf("fuseserver_create %llx %s mode %x fh %llx\n", pinum, name, mode, fi->fh);
     fuse_reply_create(req, &e, fi);
   } else {
 		if (ret == yfs_client::EXIST) {
@@ -194,7 +194,11 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 
     // get target attributes
     struct stat st;
-    getattr(inum, st);
+    if (getattr(inum, st) != yfs_client::OK)
+    {
+        fuse_reply_err(req, ENOENT);
+        return;
+    }
 
     e.ino = yfs_client::f2i(inum);
     e.attr = st;
@@ -271,18 +275,12 @@ void
 fuseserver_open(fuse_req_t req, fuse_ino_t ino,
      struct fuse_file_info *fi)
 {
-
-  //at this point only this implementation will do 
-	fuse_reply_open(req, fi);
-
-/*
   // You fill this in
-#if 0
+//#if 0
   fuse_reply_open(req, fi);
-#else
-  fuse_reply_err(req, ENOSYS);
-#endif
-*/
+//#else
+//  fuse_reply_err(req, ENOSYS);
+//#endif
 }
 
 void
