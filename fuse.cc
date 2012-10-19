@@ -147,7 +147,7 @@ fuseserver_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   struct fuse_entry_param e;
   yfs_client::status ret;
   if( (ret = fuseserver_createhelper( parent, name, mode, &e )) == yfs_client::OK ) {
-    printf("fuseserver_create %llx %s mode %x fh %llx\n", pinum, name, mode, fi->fh);
+    printf("fuseserver_create");
     fuse_reply_create(req, &e, fi);
   } else {
 		if (ret == yfs_client::EXIST) {
