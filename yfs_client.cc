@@ -231,6 +231,62 @@ yfs_client::setsize(inum inum, size_t target_size)
     
 
   }
+  else if (target_size < size)
+  {
+    printf("    truncating size from %lu to %lu\n", size, target_size);
+    // This one is easier, we iterate through current blocks
+    // until we reach desired size, then we remove remaining blocks
+    int curr_block = -1;
+    size_t remaining_size = target_size;
+    while (true)
+    {
+      printf("    remaining size %lu\n", remaining_size);
+      curr_block++;
+      yfs_client::inum key = yfs_client::i2bi(inum, curr_block);
+      extent_protocol::attr a;
+      extent_protocol::status r = ec->getattr(key, a);
+      if (r != extent_protocol::NOENT)
+      {
+        if (r != extent_protocol::OK)
+          return IOERR;
+
+        if (remaining_size <= 0) // we've already reached desired size, remove block
+        {
+          printf("    removing block %d\n", curr_block);
+          if (ec->remove(key) != extent_protocol::OK)
+            return IOERR;
+          continue;
+        }
+
+        if (a.size > remaining_size)
+        {
+          printf("    truncating block %d to %lu\n", curr_block, remaining_size);
+          // truncate this block 
+          std::string val;
+          if (ec->get(key, val) != extent_protocol::OK) 
+            return IOERR;
+
+          if (ec->put(key, val.substr(0, remaining_size)) != extent_protocol::OK)
+            return IOERR;
+
+        }
+        else
+        {
+          printf("    keeping block %d\n", curr_block);
+          // keep this block, but subtract from remaining size
+          remaining_size -= a.size;
+        }
+
+
+      }
+      else
+      {
+        printf("    reached last block (total blocks = %d)\n", curr_block);
+        break; // we've reached last block
+      }
+    }
+
+  }
 
   return OK;
 
@@ -247,11 +303,10 @@ yfs_client::write(inum inum, const char* c_contents, size_t size, off_t offset)
   // Determine the first block to write at
   int start = (int)floor(offset / BLOCK_SIZE);
 
-  // How many blocks?
-  int total_blocks = (int)ceil(size / BLOCK_SIZE);
-
   // Offset for first block
   int first_offset = offset - (start * BLOCK_SIZE);
+
+  printf("    first block: %d, first_offset: %d\n", start, first_offset);
 
   // Retrieve pre-offset data for first block (if needed)
   std::string preoffset;
@@ -260,33 +315,64 @@ yfs_client::write(inum inum, const char* c_contents, size_t size, off_t offset)
     int64_t key = yfs_client::i2bi(inum, start);
 
     std::string val;
-    if (ec->get(key, val) != extent_protocol::OK) 
+    extent_protocol::status r = ec->get(key, val);
+    if (r != extent_protocol::OK && r != extent_protocol::NOENT) 
       return IOERR;
 
     preoffset.append(val.substr(0, first_offset));
 
   }
 
+  // Retrieve post-offset data
+  size_t sz;
+  if (getsize(inum, sz) != OK)
+    return IOERR;
+
+  std::string postoffset;
+  if (read(inum, sz, offset, postoffset) != OK)
+    return IOERR;
+
+
   // Write to blocks
   std::string contents(c_contents);
-  printf("   first block: %d, total_blocks: %d\n", start, total_blocks);
-  for (int i = start; i<start+total_blocks;i++)
+  contents.append(postoffset);
+  int remaining_size = size + sz - offset;
+  int curr_block = start;
+  int total_written = 0;
+  int i=0;
+  while (remaining_size > 0)
   {
-    yfs_client::inum key = yfs_client::i2bi(inum, i);
+    yfs_client::inum key = yfs_client::i2bi(inum, curr_block);
     
     std::ostringstream os;
-    if (first_offset != 0)
+    if (first_offset > 0)
       os << preoffset;
 
+    int written_bytes = std::min((int)(BLOCK_SIZE - first_offset), remaining_size);
 
-    os << contents.substr(i-start, BLOCK_SIZE - first_offset);
+    printf("    writing %d bytes to block %d of inum %llu:\n", written_bytes, curr_block, inum);
+    printf("    contents.substring(%d, %d) of %lu\n", total_written, written_bytes,contents.size());
 
-    printf("Writing %s to block %d of inum %llu\n", os.str().data(), i, key);
+    char tmp_buf[written_bytes];
+    memset(tmp_buf, '\0', written_bytes);
+    memcpy(tmp_buf, contents.data()+total_written, written_bytes);
+    
+    std::string value(tmp_buf, written_bytes);
+    remaining_size -= written_bytes;
+    total_written += written_bytes;
+
+    os << value;
+
+    printf("%s\n", os.str().data());
+
+    
     int ret = ec->put(key, os.str());
     if (ret != extent_protocol::OK) {
       return IOERR;
     }
     first_offset = 0;
+    curr_block++;
+    i++;
 
   }
 
@@ -311,6 +397,7 @@ yfs_client::read(inum inum, size_t size, off_t offset, std::string& out)
 
   // Read blocks
   std::ostringstream os;
+  printf("   first block: %d, total_blocks: %d\n", start, total_blocks);  
   for (int i = start; i<start+total_blocks-1;i++)
   {
     yfs_client::inum key = yfs_client::i2bi(inum, i);
@@ -318,9 +405,10 @@ yfs_client::read(inum inum, size_t size, off_t offset, std::string& out)
     std::string val;
 
     int ret = ec->get(key, val);
-    if (ret != extent_protocol::OK) {
+    if (ret == extent_protocol::NOENT)
+      break; // done
+    else if (ret != extent_protocol::OK)
       return IOERR;
-    }
 
     std::string substr;
     if (first_offset != 0)
@@ -329,11 +417,13 @@ yfs_client::read(inum inum, size_t size, off_t offset, std::string& out)
       substr = val;
 
 
-    printf("Just read block number: %d (block unique key: %llu): %s\n", i, key, substr.data());
+    printf("    just read block number: %d (block unique key: %llu): %s\n", i, key, substr.data());
+    os << substr.data();
     first_offset = 0;
 
   }
 
+  printf("    file contents:%s\n", os.str().data());
   out = os.str(); 
 
   return OK;
