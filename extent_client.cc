@@ -36,6 +36,7 @@ extent_client::getattr(extent_protocol::extentid_t eid,
   return ret;
 }
 
+
 extent_protocol::status
 extent_client::put(extent_protocol::extentid_t eid, std::string buf)
 {

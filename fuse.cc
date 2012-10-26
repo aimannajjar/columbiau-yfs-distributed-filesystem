@@ -39,13 +39,19 @@ getattr(yfs_client::inum inum, struct stat &st)
      ret = yfs->getfile(inum, info);
      if(ret != yfs_client::OK)
        return ret;
+
+     size_t sz;
+     ret = yfs->getsize(inum, sz);
+     if(ret != yfs_client::OK)
+       return ret;
+
      st.st_mode = S_IFREG | 0666;
      st.st_nlink = 1;
      st.st_atime = info.atime;
      st.st_mtime = info.mtime;
      st.st_ctime = info.ctime;
-     st.st_size = info.size;
-     printf("   getattr -> %llu\n", info.size);
+     st.st_size = sz;
+     printf("   getattr -> %lu\n", sz);
    } else {
      yfs_client::dirinfo info;
      ret = yfs->getdir(inum, info);
@@ -83,14 +89,21 @@ fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set
 {
   printf("fuseserver_setattr 0x%x\n", to_set);
   if (FUSE_SET_ATTR_SIZE & to_set) {
-    printf("   fuseserver_setattr set size to %llu\n", attr->st_size);
+    printf("   fuseserver_setattr set size to %lu\n", attr->st_size);
+    
+    yfs_client::status ret = yfs->setsize(ino, attr->st_size);    
+
     struct stat st;
-    // You fill this in
-#if 0
+    yfs_client::inum inum = ino;
+
+    ret = getattr(inum, st);
+    if(ret != yfs_client::OK){
+      fuse_reply_err(req, ENOENT);
+      return;
+    }
+
     fuse_reply_attr(req, &st, 0);
-#else
-    fuse_reply_err(req, ENOSYS);
-#endif
+
   } else {
     fuse_reply_err(req, ENOSYS);
   }
@@ -100,12 +113,14 @@ void
 fuseserver_read(fuse_req_t req, fuse_ino_t ino, size_t size,
       off_t off, struct fuse_file_info *fi)
 {
-  // You fill this in
-#if 0
-  fuse_reply_buf(req, buf, size);
-#else
-  fuse_reply_err(req, ENOSYS);
-#endif
+  std::string out;
+  yfs_client::status ret = yfs->read(ino, size, off, out);
+
+  if (ret == yfs_client::OK)
+    fuse_reply_buf(req, out.c_str(), size);
+  else
+    fuse_reply_err(req, ENOSYS);
+
 }
 
 void
@@ -113,19 +128,22 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
   const char *buf, size_t size, off_t off,
   struct fuse_file_info *fi)
 {
-  // You fill this in
-#if 0
-  fuse_reply_write(req, bytes_written);
-#else
-  fuse_reply_err(req, ENOSYS);
-#endif
+  yfs_client::status ret = yfs->write(ino, buf, size, off);
+  if (ret == yfs_client::OK)
+  {
+    fuse_reply_write(req, size);
+  }
+  else
+  {
+    fuse_reply_err(req, ENOENT);
+  }
 }
 
 yfs_client::status
 fuseserver_createhelper(fuse_ino_t parent, const char *name,
      mode_t mode, struct fuse_entry_param *e)
 {
-	e->attr_timeout = 0.0;
+  e->attr_timeout = 0.0;
   e->entry_timeout = 0.0;
   
   yfs_client::inum out;
@@ -134,8 +152,6 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
   struct stat st;
   getattr(out, st);
   e->attr = st;
-
-  
 
   return ret;
 }

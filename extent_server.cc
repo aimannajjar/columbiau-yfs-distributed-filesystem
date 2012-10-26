@@ -14,7 +14,7 @@ extent_server::extent_server() {}
 
 int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 {
-  printf("extent_server::put(%llu, %s);\n", id, buf.c_str());
+  printf("extent_server::put(%llu, %s);\n", id, buf.data());
   store[id] = buf;
   if (attr_store.count(id) == 0)
   { 
@@ -72,6 +72,26 @@ int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr
 
   
 }
+
+int extent_server::setattr(extent_protocol::extentid_t id, extent_protocol::attr a)
+{
+  printf("extent_server::setattr(%llu,  size: %d):  ", id, a.size);
+
+  if (attr_store.count(id) > 0)
+  {
+    printf("success. old size was %d\n", attr_store[id].size);
+
+    attr_store[id].size = a.size;
+    return extent_protocol::OK;
+  }
+  else
+  {
+    printf("not found\n");
+    return extent_protocol::NOENT;
+  }
+  
+}
+
 
 int extent_server::remove(extent_protocol::extentid_t id, int &)
 {

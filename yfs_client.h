@@ -34,6 +34,7 @@ class yfs_client {
  private:
   static std::string filename(inum);
   static inum n2i(std::string);
+  static inum i2bi(inum, int);
  public:
   static uint32_t i2f(inum); // converts a 64-bit inum to 32-bit fuse id
   static inum f2i(uint32_t); // converts a 32-bit fuse id to 64-bit inum
@@ -51,6 +52,12 @@ class yfs_client {
 
   int createdir(inum, const char*, inum&);
   int createnode(inum, const char*, inum&);
+
+  int write(inum, const char*, size_t, off_t);
+  int read(inum, size_t, off_t, std::string&);
+
+  int setsize(inum, size_t);
+  int getsize(inum, size_t &);
 };
 
 #endif 
