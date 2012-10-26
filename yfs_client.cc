@@ -305,38 +305,12 @@ yfs_client::write(inum inum, const char* c_contents, size_t size, off_t offset)
 
   // Offset for first block
   int first_offset = offset - (start * BLOCK_SIZE);
-
   printf("    first block: %d, first_offset: %d\n", start, first_offset);
-
-  // Retrieve pre-offset data for first block (if needed)
-  std::string preoffset;
-  if (first_offset > 0)
-  {
-    int64_t key = yfs_client::i2bi(inum, start);
-
-    std::string val;
-    extent_protocol::status r = ec->get(key, val);
-    if (r != extent_protocol::OK && r != extent_protocol::NOENT) 
-      return IOERR;
-
-    preoffset.append(val.substr(0, first_offset));
-
-  }
-
-  // Retrieve post-offset data
-  size_t sz;
-  if (getsize(inum, sz) != OK)
-    return IOERR;
-
-  std::string postoffset;
-  if (read(inum, sz, offset, postoffset) != OK)
-    return IOERR;
-
 
   // Write to blocks
   std::string contents(c_contents);
-  contents.append(postoffset);
-  int remaining_size = size + sz - offset;
+  int remaining_size = size;
+
   int curr_block = start;
   int total_written = 0;
   int i=0;
@@ -344,33 +318,47 @@ yfs_client::write(inum inum, const char* c_contents, size_t size, off_t offset)
   {
     yfs_client::inum key = yfs_client::i2bi(inum, curr_block);
     
-    std::ostringstream os;
-    if (first_offset > 0)
-      os << preoffset;
+    // Get existing data in the block
+    std::string datastr;
+    int ret = ec->get(key, datastr);
+    if (ret != extent_protocol::OK && ret != extent_protocol::NOENT) {
+      return IOERR;
+    }
 
+    // determine how much of the buffer we want to copy
     int written_bytes = std::min((int)(BLOCK_SIZE - first_offset), remaining_size);
-
     printf("    writing %d bytes to block %d of inum %llu:\n", written_bytes, curr_block, inum);
     printf("    contents.substring(%d, %d) of %lu\n", total_written, written_bytes,contents.size());
 
+    // allocate a tmp buffer to copy from
     char tmp_buf[written_bytes];
     memset(tmp_buf, '\0', written_bytes);
     memcpy(tmp_buf, contents.data()+total_written, written_bytes);
     
-    std::string value(tmp_buf, written_bytes);
-    remaining_size -= written_bytes;
-    total_written += written_bytes;
+    // allocate a buffer for complete data
+    size_t datasize = std::max((int)datastr.size(), first_offset+written_bytes);
+    char databuf[datasize];
+    memcpy(databuf, datastr.data(), datastr.size()); // copy exiting data
+    memcpy(databuf+first_offset, tmp_buf, written_bytes); // copy new data
 
-    os << value;
 
-    printf("%s\n", os.str().data());
+    // Create an std::string object
+    std::string value(databuf, datasize);
+
+
+    // just for output 
+    std::string sub(tmp_buf, written_bytes);
+    printf("%s\n", sub.c_str());
 
     
-    int ret = ec->put(key, os.str());
+    ret = ec->put(key, value);
     if (ret != extent_protocol::OK) {
       return IOERR;
     }
-    first_offset = 0;
+    // update numbers
+    remaining_size -= written_bytes;
+    total_written += written_bytes;
+    first_offset = 0;    
     curr_block++;
     i++;
 
@@ -506,11 +494,8 @@ yfs_client::createnode(inum parent, const char* name, inum & out)
   inum inum = yfs_client::f2i(fuse_number);
 
   // Serialize an empty file
-  std::ostringstream ost;
-  ost << inum;
-  ost << " ";
-  ost << std::string(name);
-  int ret = ec->put(inum, ost.str());
+  std::string empty;
+  int ret = ec->put(inum, empty);
   if (ret != extent_protocol::OK) {
     r = IOERR;
   }

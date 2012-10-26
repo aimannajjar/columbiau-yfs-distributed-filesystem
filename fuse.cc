@@ -128,6 +128,7 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
   const char *buf, size_t size, off_t off,
   struct fuse_file_info *fi)
 {
+  printf("fuseserver_write(flags=%d)\n", fi->flags);
   yfs_client::status ret = yfs->write(ino, buf, size, off);
   if (ret == yfs_client::OK)
   {
