@@ -1,5 +1,5 @@
-LAB=3
-SOL=2
+LAB=4
+SOL=0
 RPC=./rpc
 LAB2GE=$(shell expr $(LAB) \>\= 2)
 LAB4GE=$(shell expr $(LAB) \>\= 4)
@@ -36,7 +36,7 @@ lab:  lab$(LAB)
 lab1: rpc/rpctest lock_server lock_tester lock_demo
 lab2: yfs_client extent_server
 lab3: yfs_client extent_server
-lab4: yfs_client extent_server lock_server test-lab-4-b test-lab-4-c
+lab4: yfs_client extent_server lock_tester lock_server test-lab-4-b test-lab-4-c
 lab5: yfs_client extent_server lock_server lock_tester test-lab-4-b\
 	 test-lab-4-c
 lab6: yfs_client extent_server lock_server test-lab-4-b test-lab-4-c
@@ -129,7 +129,7 @@ l2-sol:
 	 stop.sh test-lab-2.pl mkfs.sh $(hfiles2) $(hfiles1)
 
 l3:
-	./mklab.sh 3 2 l3 GNUmakefile  $(rpclib) $(yfs_client) $(extent_server) $(lock_server) start.sh\
+	./mklab.sh 3 0 l3 GNUmakefile  $(rpclib) $(yfs_client) $(extent_server) $(lock_server) start.sh\
 	 stop.sh test-lab-2.pl mkfs.sh $(hfiles2) $(hfiles1) test-lab-3.pl
 
 l3-sol:
