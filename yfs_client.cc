@@ -615,6 +615,8 @@ yfs_client::getdircontents_nonsafe(inum parent, std::vector<dirent>& list)
     printf("Added %s\n", entry.name.c_str());
   }
 
+  return OK;
+
 }
 
 int
