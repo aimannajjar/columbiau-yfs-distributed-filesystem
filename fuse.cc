@@ -129,6 +129,7 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
   struct fuse_file_info *fi)
 {
   printf("fuseserver_write(flags=%d)\n", fi->flags);
+  yfs->updatetime(yfs_client::f2i(ino));
   yfs_client::status ret = yfs->write(ino, buf, size, off);
   if (ret == yfs_client::OK)
   {
@@ -279,7 +280,7 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   for (it = v.begin(); it < v.end(); it++)
   {
     yfs_client::dirent entry = *it;
-    dirbuf_add(&b, entry.name.c_str(), yfs_client::f2i(entry.inum));
+    dirbuf_add(&b, entry.name.c_str(), yfs_client::i2f(entry.inum));
   }
 
 
@@ -292,6 +293,10 @@ void
 fuseserver_open(fuse_req_t req, fuse_ino_t ino,
      struct fuse_file_info *fi)
 {
+  
+  // Update mtime
+  yfs->updatetime(yfs_client::f2i(ino));
+
   // You fill this in
 //#if 0
   fuse_reply_open(req, fi);
@@ -331,11 +336,28 @@ void
 fuseserver_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
 
-  // You fill this in
-  // Success:	fuse_reply_err(req, 0);
-  // Not found:	fuse_reply_err(req, ENOENT);
-  fuse_reply_err(req, ENOSYS);
+  yfs_client::status r = yfs->unlink(parent, name);
+  if (r == yfs_client::NOENT)
+    fuse_reply_err(req, ENOENT);
+  else if (r == yfs_client::OK)
+    fuse_reply_err(req, 0);
+  else
+    fuse_reply_err(req, ENOSYS);
 }
+
+void
+fuseserver_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+
+  yfs_client::status r = yfs->unlink(parent, name);
+  if (r == yfs_client::NOENT)
+    fuse_reply_err(req, ENOENT);
+  else if (r == yfs_client::OK)
+    fuse_reply_err(req, 0);
+  else
+    fuse_reply_err(req, ENOSYS);
+}
+
 
 void
 fuseserver_statfs(fuse_req_t req)
@@ -362,7 +384,7 @@ main(int argc, char *argv[])
   int fd;
 
 
-  srand(time(0));
+  srand(getpid());
 
   setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -390,6 +412,7 @@ main(int argc, char *argv[])
   fuseserver_oper.setattr    = fuseserver_setattr;
   fuseserver_oper.unlink     = fuseserver_unlink;
   fuseserver_oper.mkdir      = fuseserver_mkdir;
+  fuseserver_oper.rmdir      = fuseserver_rmdir;
 
   const char *fuse_argv[20];
   int fuse_argc = 0;

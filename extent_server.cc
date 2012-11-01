@@ -18,14 +18,14 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
   store[id] = buf;
   if (attr_store.count(id) == 0)
   { 
-      extent_protocol::attr nattr;
-      nattr.ctime = time(NULL);
+      extent_protocol::attr nattr;      
       attr_store[id] = nattr;
     }
 
     attr_store[id].size = buf.size();
     attr_store[id].atime = time(NULL);
     attr_store[id].mtime = time(NULL);
+    attr_store[id].ctime = time(NULL);
 
   return extent_protocol::OK;
 }

@@ -22,11 +22,9 @@ yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
   {
     // Serialize an empty directory for root
     inum inum = 1;
-    std::ostringstream ost;
-    ost << inum;
-    ost << " ";
-    ost << std::string("root");
-    int ret = ec->put(inum, ost.str());
+    std::ostringstream os;
+    os << inum;
+    int ret = ec->put(inum, os.str());
     if (ret != extent_protocol::OK)
       printf("Error: could not initialize root directory\n");
   }
@@ -86,6 +84,116 @@ bool
 yfs_client::isdir(inum inum)
 {
   return ! isfile(inum);
+}
+
+int
+yfs_client::unlink(inum parent, const char* name)
+{
+
+  yfs_client::inum inum;
+  yfs_client::status ret = lookup(yfs_client::f2i(parent), name, inum);
+  if (ret == extent_protocol::NOENT)
+    return NOENT;
+  else if (ret != extent_protocol::OK)
+    return IOERR;
+
+
+  yfs_client::status r = OK;
+  if (isdir(inum))
+  {
+
+    // First remove dir contents:
+    std::vector<yfs_client::dirent> v;
+    getdircontents(inum, v);
+
+    std::vector<yfs_client::dirent>::iterator it;
+    for (it = v.begin(); it < v.end(); it++)
+    {
+      yfs_client::dirent entry = *it;
+      if (unlink(inum, entry.name.c_str()) != yfs_client::OK)
+      {
+        r = IOERR;
+        break;
+      }
+    }
+    if (r != OK)
+      return r;
+
+    // Remove directory itself
+    extent_protocol::status r = ec->remove(inum);
+    if (r == extent_protocol::OK)
+      r = OK;
+    else if (r == extent_protocol::NOENT)
+    {
+      r =  NOENT;
+      return r;
+    }
+    else
+    {
+      r = IOERR;
+      return r;
+    }
+  }
+  else
+  {
+    r = ec->remove(inum) != extent_protocol::OK;
+    if (r == extent_protocol::OK)
+      r = OK;
+    else if (r == extent_protocol::NOENT)
+    {
+      r = NOENT;
+      return r;
+    }
+    else
+    {
+      r = IOERR;
+      return r;
+    }
+
+    // Now remove next blocks for this file
+    int i = 1;
+    int64_t key = yfs_client::i2bi(inum, i);
+    extent_protocol::status r;
+    extent_protocol::attr a;
+    while ( (r = ec->getattr(key, a)) != extent_protocol::NOENT) 
+    {
+      if (r != extent_protocol::OK)
+        return IOERR; // unexpected error type;
+
+      if (ec->remove(inum) != extent_protocol::OK)
+        return IOERR;
+
+      i++;
+      key = yfs_client::i2bi(inum, i);
+    }
+
+  }
+
+
+  // Now remove this entry from parents content
+  std::vector<yfs_client::dirent> v;
+  getdircontents(parent, v);
+
+  std::ostringstream os;
+  std::vector<yfs_client::dirent>::iterator it;
+  os << parent;
+  for (it = v.begin(); it < v.end(); it++)
+  {
+    yfs_client::dirent entry = *it;
+    if (entry.inum != inum)
+    {
+      os << " ";
+      os << entry.inum;
+      os << " ";
+      os << entry.name;
+    }
+  }
+  std::string contents(os.str());
+  ec->put(parent, trim(contents));
+  printf("New directory contents: %s\n", trim(contents).c_str());
+
+  return r;
+
 }
 
 int
@@ -297,9 +405,25 @@ yfs_client::setsize(inum inum, size_t target_size)
 }
 
 int
+yfs_client::updatetime(inum inum)
+{
+  printf("Updating time for %llu\n", inum);
+  std::string firstblock;
+  if (ec->get(inum, firstblock) != extent_protocol::OK)
+    return IOERR;
+  
+  if (ec->put(inum, firstblock) != extent_protocol::OK)
+    return IOERR;
+
+  return OK;  
+}
+
+
+int
 yfs_client::write(inum inum, const char* c_contents, size_t size, off_t offset)
 {
   printf("YFS::write(%llu, %ld, %lu)\n", inum, offset, size);
+
   // Determine the first block to write at
   int start = (int)floor(offset / BLOCK_SIZE);
 
@@ -429,12 +553,10 @@ yfs_client::getdircontents(inum parent, std::vector<dirent>& list)
   }
 
   //  Deserialize direcory
-  std::istringstream is(val);
-  inum dir_inum;
-  std::string dir_name;
-
-  is >> dir_inum;
-  is >> dir_name;
+  std::istringstream is(trim(val));
+  printf("Deserializing %s\n", val.c_str());
+  yfs_client::inum myinum;
+  is >> myinum;
 
   while ( !is.eof() )
   {
@@ -442,6 +564,9 @@ yfs_client::getdircontents(inum parent, std::vector<dirent>& list)
     is >> entry.inum;
     is >> entry.name;
     list.push_back(entry);
+    if (trim(entry.name).empty())
+      continue;
+    printf("Added %s\n", entry.name.c_str());
   }
   return OK;
 
@@ -456,11 +581,9 @@ yfs_client::createdir(inum parent, const char* name, inum & out)
   inum inum = yfs_client::f2i(fuse_number);
 
   // Serialize an empty directory
-  std::ostringstream ost;
-  ost << inum;
-  ost << " ";
-  ost << std::string(name);
-  int ret = ec->put(inum, ost.str());
+  std::ostringstream oss;
+  oss << inum;
+  int ret = ec->put(inum, oss.str());
   if (ret != extent_protocol::OK) {
     r = IOERR;
   }
@@ -475,7 +598,8 @@ yfs_client::createdir(inum parent, const char* name, inum & out)
   os << inum;
   os << " ";
   os << std::string(name);
-  ret = ec->put(parent, os.str());
+  std::string contents(os.str());
+  ret = ec->put(parent, trim(contents));
   if (ret != extent_protocol::OK)
     r = IOERR;
 
@@ -488,10 +612,18 @@ yfs_client::createnode(inum parent, const char* name, inum & out)
 
   printf("YFS::createnode(parent=%llu, %s)\n", parent, name);
 
+  // Let's check if node exists already
+  yfs_client::inum existing_num = 0;
+  yfs_client::status lookret = lookup(parent, name, existing_num);
+
+
   int r = OK;
-  
-  uint32_t fuse_number = rand() | 0x80000000; 
-  inum inum = yfs_client::f2i(fuse_number);
+  yfs_client::inum inum = existing_num;
+  if (lookret == yfs_client::NOENT)
+  {
+    uint32_t fuse_number = rand() | 0x80000000; 
+    inum = yfs_client::f2i(fuse_number);
+  }
 
   // Serialize an empty file
   std::string empty;
@@ -501,18 +633,23 @@ yfs_client::createnode(inum parent, const char* name, inum & out)
   }
   out = inum;
 
-  // Append an entry to parent
-  std::string parent_dir;
-  ret = ec->get(parent, parent_dir);
-  std::ostringstream os;
-  os << parent_dir;
-  os << " ";
-  os << inum;
-  os << " ";
-  os << std::string(name);
-  ret = ec->put(parent, os.str());
-  if (ret != extent_protocol::OK)
-    r = IOERR;
+
+  // Append an entry to parent if neccessary
+  if (lookret == yfs_client::NOENT)
+  {
+    std::string parent_dir;
+    ret = ec->get(parent, parent_dir);
+    std::ostringstream os;
+    os << parent_dir;
+    os << " ";
+    os << inum;
+    os << " ";
+    os << std::string(name);
+    std::string contents(os.str());
+    ret = ec->put(parent, trim(contents));
+    if (ret != extent_protocol::OK)
+      r = IOERR;
+  }
 
   return r;
 }
@@ -532,17 +669,12 @@ yfs_client::lookup(inum parent, const char* name, inum & out)
 
   printf("%s.. let's deserialize:\n", val.c_str());
 
-  inum parent_inum;
-  std::string parent_name;
-
   std::istringstream is(val);
-  is >> parent_inum;
-  is >> parent_name;
-  
-  printf("parent inum: %llu\nparent name:%s\ncontents:\n", 
-          parent_inum, parent_name.c_str());
+  printf("contents:\n");
 
   std::string target_name(name);
+  yfs_client::inum parentinum;
+  is >> parentinum;
 
   while (!is.eof())
   {

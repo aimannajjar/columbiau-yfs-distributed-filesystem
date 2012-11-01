@@ -2,10 +2,12 @@
 #define yfs_client_h
 
 #include <string>
-//#include "yfs_protocol.h"
 #include "extent_client.h"
 #include <vector>
-
+#include <algorithm> 
+#include <functional> 
+#include <cctype>
+#include <locale>
 
 class yfs_client {
   extent_client *ec;
@@ -31,6 +33,24 @@ class yfs_client {
     unsigned long long inum;
   };
 
+
+// trim from start
+static inline std::string &ltrim(std::string &s) {
+  s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
+  return s;
+}
+
+// trim from end
+static inline std::string &rtrim(std::string &s) {
+  s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
+  return s;
+}
+
+// trim from both ends
+static inline std::string &trim(std::string &s) {
+  return ltrim(rtrim(s));
+}
+
  private:
   static std::string filename(inum);
   static inum n2i(std::string);
@@ -55,6 +75,10 @@ class yfs_client {
 
   int write(inum, const char*, size_t, off_t);
   int read(inum, size_t, off_t, std::string&);
+
+  int updatetime(inum);
+
+  int unlink(inum, const char*);
 
   int setsize(inum, size_t);
   int getsize(inum, size_t &);
