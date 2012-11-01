@@ -432,7 +432,7 @@ yfs_client::write(inum inum, const char* c_contents, size_t size, off_t offset)
   printf("    first block: %d, first_offset: %d\n", start, first_offset);
 
   // Write to blocks
-  std::string contents(c_contents);
+  std::string contents(c_contents, size);
   int remaining_size = size;
 
   int curr_block = start;
