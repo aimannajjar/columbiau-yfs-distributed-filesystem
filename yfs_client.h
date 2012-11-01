@@ -2,12 +2,13 @@
 #define yfs_client_h
 
 #include <string>
-#include "extent_client.h"
 #include <vector>
 #include <algorithm> 
 #include <functional> 
 #include <cctype>
 #include <locale>
+#include "extent_client.h"
+#include "lock_client.h"
 
 class yfs_client {
   extent_client *ec;
@@ -55,6 +56,7 @@ static inline std::string &trim(std::string &s) {
   static std::string filename(inum);
   static inum n2i(std::string);
   static inum i2bi(inum, int);
+  lock_client *lc;
  public:
   static uint32_t i2f(inum); // converts a 64-bit inum to 32-bit fuse id
   static inum f2i(uint32_t); // converts a 32-bit fuse id to 64-bit inum
@@ -68,6 +70,7 @@ static inline std::string &trim(std::string &s) {
   int getdir(inum, dirinfo &);
 
   int getdircontents(inum, std::vector<dirent>&);
+  int getdircontents_nonsafe(inum, std::vector<dirent>&);
   int lookup(inum, const char*, inum&);
 
   int createdir(inum, const char*, inum&);
@@ -78,7 +81,7 @@ static inline std::string &trim(std::string &s) {
 
   int updatetime(inum);
 
-  int unlink(inum, const char*);
+  int unlink(inum, const char*,  bool do_not_lock=false);
 
   int setsize(inum, size_t);
   int getsize(inum, size_t &);

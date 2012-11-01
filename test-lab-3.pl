@@ -90,16 +90,16 @@ sub writeone {
 
     use FileHandle;
     sysopen F, $f, O_TRUNC|O_RDWR|O_CREAT
-	or die "cannot create $f\n";
+    or die "cannot create $f\n";
 
     while(length($contents) < $len){
-	$contents .= rand();
+    $contents .= rand();
     }
     $contents = substr($contents, 0, $len);
     $files->{$name} = $contents;
 
     syswrite F, $files->{$name}, length($files->{$name}) 
-	or die "cannot write to $f";
+    or die "cannot write to $f";
     close(F);
 }
 
@@ -136,11 +136,11 @@ sub append {
 
     use FileHandle;
     sysopen F, "$f", O_RDWR
-	or die "cannot open $f for append\n";
+    or die "cannot open $f for append\n";
 
     my $contents = "";
     while(length($contents) < $n){
-	$contents .= rand();
+    $contents .= rand();
     }
     $contents = substr($contents, 0, $n);
     $files->{$name} .= $contents; ## Append the file content
@@ -157,7 +157,7 @@ sub writeat {
 
     use FileHandle;
     sysopen F, "$f", O_RDWR
-	or die "cannot open $f for read/write\n";
+    or die "cannot open $f for read/write\n";
 
     my $contents = rand();
 

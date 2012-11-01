@@ -17,6 +17,7 @@
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
+  lc = new lock_client(lock_dst);
   std::string buf;
   if (ec->get(1, buf) == extent_protocol::NOENT)
   {
@@ -87,15 +88,23 @@ yfs_client::isdir(inum inum)
 }
 
 int
-yfs_client::unlink(inum parent, const char* name)
+yfs_client::unlink(inum parent, const char* name, bool do_not_lock)
 {
-
+  // If do_not_lock is set, assumes parent lock is acquired
+  if (!do_not_lock) lc->acquire(parent);
   yfs_client::inum inum;
   yfs_client::status ret = lookup(yfs_client::f2i(parent), name, inum);
   if (ret == extent_protocol::NOENT)
+  {
+    if (!do_not_lock) lc->release(parent);
     return NOENT;
+  }
   else if (ret != extent_protocol::OK)
+  {
+    if (!do_not_lock) lc->release(parent);
     return IOERR;
+  }
+  lc->acquire(inum);
 
 
   yfs_client::status r = OK;
@@ -104,20 +113,24 @@ yfs_client::unlink(inum parent, const char* name)
 
     // First remove dir contents:
     std::vector<yfs_client::dirent> v;
-    getdircontents(inum, v);
+    getdircontents_nonsafe(inum, v);
 
     std::vector<yfs_client::dirent>::iterator it;
     for (it = v.begin(); it < v.end(); it++)
     {
       yfs_client::dirent entry = *it;
-      if (unlink(inum, entry.name.c_str()) != yfs_client::OK)
+      if (unlink(inum, entry.name.c_str(), do_not_lock) != yfs_client::OK)
       {
         r = IOERR;
         break;
       }
     }
     if (r != OK)
+    {
+      lc->release(inum);
+      if (!do_not_lock) lc->release(parent);
       return r;
+    }
 
     // Remove directory itself
     extent_protocol::status r = ec->remove(inum);
@@ -126,11 +139,15 @@ yfs_client::unlink(inum parent, const char* name)
     else if (r == extent_protocol::NOENT)
     {
       r =  NOENT;
+      lc->release(inum);
+      if (!do_not_lock) lc->release(parent);
       return r;
     }
     else
     {
       r = IOERR;
+      lc->release(inum);
+      if (!do_not_lock) lc->release(parent);
       return r;
     }
   }
@@ -142,11 +159,15 @@ yfs_client::unlink(inum parent, const char* name)
     else if (r == extent_protocol::NOENT)
     {
       r = NOENT;
+      lc->release(inum);
+      if (!do_not_lock) lc->release(parent);      
       return r;
     }
     else
     {
       r = IOERR;
+      lc->release(inum);
+      if (!do_not_lock) lc->release(parent);      
       return r;
     }
 
@@ -158,10 +179,18 @@ yfs_client::unlink(inum parent, const char* name)
     while ( (r = ec->getattr(key, a)) != extent_protocol::NOENT) 
     {
       if (r != extent_protocol::OK)
+      {
+        lc->release(inum);
+        if (!do_not_lock) lc->release(parent);
         return IOERR; // unexpected error type;
+      }
 
       if (ec->remove(inum) != extent_protocol::OK)
+      {
+        lc->release(inum);
+        if (!do_not_lock) lc->release(parent);
         return IOERR;
+      }
 
       i++;
       key = yfs_client::i2bi(inum, i);
@@ -172,7 +201,7 @@ yfs_client::unlink(inum parent, const char* name)
 
   // Now remove this entry from parents content
   std::vector<yfs_client::dirent> v;
-  getdircontents(parent, v);
+  getdircontents_nonsafe(parent, v);
 
   std::ostringstream os;
   std::vector<yfs_client::dirent>::iterator it;
@@ -191,6 +220,9 @@ yfs_client::unlink(inum parent, const char* name)
   std::string contents(os.str());
   ec->put(parent, trim(contents));
   printf("New directory contents: %s\n", trim(contents).c_str());
+
+  lc->release(inum);
+  if (!do_not_lock) lc->release(parent);
 
   return r;
 
@@ -545,11 +577,25 @@ yfs_client::read(inum inum, size_t size, off_t offset, std::string& out)
 int
 yfs_client::getdircontents(inum parent, std::vector<dirent>& list)
 {
+  lc->acquire(parent);
+  int r =getdircontents_nonsafe(parent, list);
+  lc->release(parent);
+  return r;
+
+}
+
+int
+yfs_client::getdircontents_nonsafe(inum parent, std::vector<dirent>& list)
+{
+  // Assumes lock is acquired
+
   printf("YFS::getdircontents(%llu)\n", parent);
   std::string val;
   if (ec->get(parent, val) != extent_protocol::OK) {
     printf("directory inum was not found..\n");
-    return IOERR;
+    {
+      return IOERR;
+    }
   }
 
   //  Deserialize direcory
@@ -568,7 +614,6 @@ yfs_client::getdircontents(inum parent, std::vector<dirent>& list)
       continue;
     printf("Added %s\n", entry.name.c_str());
   }
-  return OK;
 
 }
 
@@ -577,6 +622,8 @@ yfs_client::createdir(inum parent, const char* name, inum & out)
 {
   int r = OK;
   
+  lc->acquire(parent);
+
   uint32_t fuse_number = rand() & ~0x80000000;  // ensure first bit is not set
   inum inum = yfs_client::f2i(fuse_number);
 
@@ -585,7 +632,8 @@ yfs_client::createdir(inum parent, const char* name, inum & out)
   oss << inum;
   int ret = ec->put(inum, oss.str());
   if (ret != extent_protocol::OK) {
-    r = IOERR;
+    lc->release(parent);
+    return IOERR;
   }
   out = inum;
 
@@ -603,6 +651,7 @@ yfs_client::createdir(inum parent, const char* name, inum & out)
   if (ret != extent_protocol::OK)
     r = IOERR;
 
+  lc->release(parent);
   return r;
 }
 
@@ -611,6 +660,7 @@ yfs_client::createnode(inum parent, const char* name, inum & out)
 {
 
   printf("YFS::createnode(parent=%llu, %s)\n", parent, name);
+  lc->acquire(parent);
 
   // Let's check if node exists already
   yfs_client::inum existing_num = 0;
@@ -624,12 +674,16 @@ yfs_client::createnode(inum parent, const char* name, inum & out)
     uint32_t fuse_number = rand() | 0x80000000; 
     inum = yfs_client::f2i(fuse_number);
   }
+  lc->acquire(inum);
 
   // Serialize an empty file
   std::string empty;
   int ret = ec->put(inum, empty);
   if (ret != extent_protocol::OK) {
     r = IOERR;
+    lc->release(inum);
+    lc->release(parent);
+    return r;
   }
   out = inum;
 
@@ -650,6 +704,8 @@ yfs_client::createnode(inum parent, const char* name, inum & out)
     if (ret != extent_protocol::OK)
       r = IOERR;
   }
+  lc->release(inum);
+  lc->release(parent);
 
   return r;
 }
