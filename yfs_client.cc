@@ -103,7 +103,7 @@ yfs_client::unlink(inum parent, const char* name, bool do_not_lock)
   {
     if (!do_not_lock) lc->release(parent);
     return IOERR;
-  }
+  } 
   lc->acquire(inum);
 
 
