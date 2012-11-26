@@ -110,7 +110,7 @@ lock_server_cache::acquire(std::string host, int port, int seq, lock_protocol::l
       r = lock_protocol::OK;
     }
     
-    return lock_protocol::OK;
+    return r;
   }
   else
   {
@@ -137,6 +137,8 @@ lock_server_cache::acquire(std::string host, int port, int seq, lock_protocol::l
 
     // Add to retryer queue (but don't wake it now)
     retry_list.push_back(lid);
+    
+    r = lock_protocol::RETRY;
 
     return lock_protocol::RETRY;
   }
@@ -183,9 +185,7 @@ void
 lock_server_cache::retryer()
 {
 
-  // This method should be a continuous loop, waiting for locks
-  // to be released and then sending retry messages to those who
-  // are waiting for it.
+
   while (true)
   {
     ScopedLock l(&retry_m);

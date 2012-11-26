@@ -81,6 +81,7 @@ struct lock_struct
   enum lock_state { FREE, LOCKED, ACQUIRING, RELEASING };
   typedef int state;
   int lock_state;
+  lock_protocol::lockid_t lid;
   pthread_mutex_t* mutex; 
   pthread_cond_t* cond;
   pthread_t current_owner;
@@ -107,7 +108,7 @@ protected:
   std::map<lock_protocol::lockid_t, struct lock_struct*> locks_cache;
   pthread_mutex_t releaser_m;
   pthread_cond_t releaser_cond;
-  std::queue<lock_protocol::lockid_t> release_queue;
+  std::queue<struct lock_struct*> release_queue;
 
   // std::map<int, struct call> calls;
   std::list<unsigned int> seq_window;  
