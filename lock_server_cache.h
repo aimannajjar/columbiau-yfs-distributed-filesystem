@@ -44,6 +44,7 @@ class lock_server_cache {
     std::map<lock_protocol::lockid_t, struct lock_st> locks_table;
     std::vector<lock_protocol::lockid_t> retry_list;
     std::queue<qrequest> revoke_queue;
+    std::map<std::string, rpcc*> rpc_clients;
     pthread_cond_t retry_cond;
     pthread_cond_t revoke_cond;
     pthread_mutex_t retry_m;

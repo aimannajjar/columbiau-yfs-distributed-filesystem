@@ -17,7 +17,7 @@
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
-  lc = new lock_client(lock_dst);
+  lc = new lock_client_cache(lock_dst);
   std::string buf;
   if (ec->get(1, buf) == extent_protocol::NOENT)
   {

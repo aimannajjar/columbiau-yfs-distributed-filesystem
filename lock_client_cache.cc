@@ -73,7 +73,7 @@ lock_client_cache::lock_client_cache(std::string xdst,
 rlock_protocol::status
 lock_client_cache::retry(int clt, lock_protocol::lockid_t lid, int seq, int & r)
 {
-  printf("%s: Received retry for lock %llu in response to seq: %d, current seq is: %d\n", id.c_str(), lid, seq, seqno);
+  // printf("%s: Received retry for lock %llu in response to seq: %d, current seq is: %d\n", id.c_str(), lid, seq, seqno);
 
   ScopedLock l(&locks_cache_m);  
   if (locks_cache.count(lid) == 0)
@@ -83,18 +83,21 @@ lock_client_cache::retry(int clt, lock_protocol::lockid_t lid, int seq, int & r)
 
 
   ScopedLock l2(lock->mutex);  
+  if (lock->lock_state == lock_struct::FREE || lock->lock_state == lock_struct::LOCKED)
+    return rlock_protocol::OK;
+  
   int r2;
   int ret = cl->call(lock_protocol::acquire, id, rlock_port, seqno++, lid, r2);
   if (ret == lock_protocol::OK || ret == lock_protocol::NOCACHE)
   {
     if (ret == lock_protocol::NOCACHE)
     {
-      printf("NOCACHE returned\n");
+      // printf("NOCACHE returned\n");
       lock->revoke_requested = true;
     }
     else
     {
-      printf("CACHABLE\n");
+      // printf("CACHABLE\n");
       lock->revoke_requested = false;
     }
 
@@ -111,10 +114,10 @@ lock_client_cache::revoke(int clt, lock_protocol::lockid_t lid, int seq, int & r
 {
   ScopedLock l(&locks_cache_m);  
 
-  printf("%s: Received revoke for lock %llu in response to seq: %d, current seq is: %d\n", id.c_str(), lid, seq, seqno);
+  // printf("%s: Received revoke for lock %llu in response to seq: %d, current seq is: %d\n", id.c_str(), lid, seq, seqno);
   if (locks_cache.count(lid) == 0)
   {
-    printf("%s:revoke: lock %llu does not exist, probably already revoked previously\n", id.c_str(), lid);
+    // printf("%s:revoke: lock %llu does not exist, probably already revoked previously\n", id.c_str(), lid);
     return rlock_protocol::NOENT;
   }
 
@@ -156,7 +159,7 @@ lock_client_cache::releaser()
     struct lock_struct* lock = release_queue.front();
     release_queue.pop();
 
-    printf("%s: Sending release for lock %llu\n", id.c_str(), lock->lid);
+    // printf("%s: Sending release for lock %llu\n", id.c_str(), lock->lid);
 
     int r;
     int ret = cl->call(lock_protocol::release, id, rlock_port, 0, lock->lid, r);
@@ -175,7 +178,7 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
 {
 
   
-  printf("%s: acquiring %llu\n", id.c_str(), lid);
+  // printf("%s: acquiring %llu\n", id.c_str(), lid);
   struct lock_struct* rl;
 
   {    
@@ -185,7 +188,7 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
     if (locks_cache.count(lid) == 0)
     {
       // Request the lock from server
-      printf("%s: sending acquire for lock %llu with seq number: %d\n", id.c_str(), lid, (seqno+1));
+      // printf("%s: sending acquire for lock %llu with seq number: %d\n", id.c_str(), lid, (seqno+1));
       int r;
       int ret = cl->call(lock_protocol::acquire, id, rlock_port, seqno++, lid, r);
       int state = lock_struct::ACQUIRING;
@@ -201,16 +204,16 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
       if (ret == lock_protocol::NOCACHE)
       {
         rl->revoke_requested = true;
-        printf("%s:acquire: server says don't cache lock %llu\n", id.c_str(), lid);
+        // printf("%s:acquire: server says don't cache lock %llu\n", id.c_str(), lid);
       }
       else if (ret == lock_protocol::OK)
       {
-        printf("%s:acquire: server says you can cache lock %llu\n", id.c_str(), lid);
+        // printf("%s:acquire: server says you can cache lock %llu\n", id.c_str(), lid);
         rl->revoke_requested = false;
       }
       else
       {
-        printf("%s:acquire: server says wait for a retry call for lock %llu\n", id.c_str(), lid);
+        // printf("%s:acquire: server says wait for a retry call for lock %llu\n", id.c_str(), lid);
       }
       rl->lid = lid;
       rl->lock_state = state;
@@ -224,7 +227,7 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
     }
     else
     {
-      printf("%s:acquire: I currently own this lock %llu; not calling the server\n", id.c_str(), lid);
+      // printf("%s:acquire: I currently own this lock %llu; not calling the server\n", id.c_str(), lid);
       rl = locks_cache[lid]; // existing lock
       rl->requests++;
     }
@@ -243,7 +246,7 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
     rl->lock_state = lock_struct::LOCKED;
     rl->current_owner = pthread_self();
     rl->requests--;
-    printf("%s: acquired lock %llu\n", id.c_str(), lid);
+    // printf("%s: acquired lock %llu\n", id.c_str(), lid);
 
   }
   
@@ -253,11 +256,11 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
 lock_protocol::status
 lock_client_cache::release(lock_protocol::lockid_t lid)
 {
-    printf("%s: releasing %llu\n", id.c_str(), lid);
+    // printf("%s: releasing %llu\n", id.c_str(), lid);
     ScopedLock l(&locks_cache_m);  
     if (locks_cache.count(lid) == 0)
     {
-      printf("%s:lock %llu doesn't exit in cache!\n", id.c_str(), lid);
+      // printf("%s:lock %llu doesn't exit in cache!\n", id.c_str(), lid);
       return lock_protocol::NOENT;
     }
 
@@ -265,7 +268,7 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
     
     
     ScopedLock l2(lock->mutex);  
-    printf("%s:release: lock=%llu; revoke requested=%d; backlog_requests=%d\n", id.c_str(), lid, lock->revoke_requested, lock->requests);
+    // printf("%s:release: lock=%llu; revoke requested=%d; backlog_requests=%d\n", id.c_str(), lid, lock->revoke_requested, lock->requests);
 
     assert( pthread_equal(pthread_self(), lock->current_owner));
 
@@ -275,7 +278,7 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
     {
 
       ScopedLock l3(&releaser_m);
-      printf("%s: granting lock %llu back to server\n",id.c_str(), lid);
+      // printf("%s: granting lock %llu back to server\n",id.c_str(), lid);
       lock->lock_state = lock_struct::RELEASING;
       release_queue.push(lock);
       locks_cache.erase(lid);
