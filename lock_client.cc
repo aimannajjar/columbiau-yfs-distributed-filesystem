@@ -8,6 +8,8 @@
 #include <iostream>
 #include <stdio.h>
 
+lock_client::lock_client() { }
+
 lock_client::lock_client(std::string dst)
 {
   sockaddr_in dstsock;

@@ -4,6 +4,7 @@
 #include <string>
 #line 6 "../lock_server_cache.h"
 #include <map>
+#include <queue>
 #line 8 "../lock_server_cache.h"
 #include "lock_protocol.h"
 #include "rpc.h"
@@ -15,19 +16,46 @@
 #line 50 "../lock_server_cache.h"
 
 #line 54 "../lock_server_cache.h"
+
+struct qrequest
+{
+    std::string host;
+    lock_protocol::lockid_t lid;
+};
+
+struct lock_st
+{
+  enum lock_state { FREE, LOCKED };
+  typedef int state;
+  int lock_state;
+  std::string current_owner;
+  int requests; /* number of clients waiting for this lock */
+};
+
+
 class lock_server_cache {
 #line 56 "../lock_server_cache.h"
+ public:
+    enum lock_state { FREE, LOCKED };
  private:
     pthread_mutex_t locks_table_m;
-    std::map<lock_protocol::lockid_t, lock_server_cache::lock_state> locks_table;
+    std::map<lock_protocol::lockid_t, struct lock_st> locks_table;
+    std::vector<qrequest> retry_list;
+    std::queue<qrequest> revoke_queue;
+    pthread_cond_t retry_cond;
+    pthread_cond_t revoke_cond;
+    pthread_mutex_t retry_m;
+    pthread_mutex_t revoke_m;
+
 #line 88 "../lock_server_cache.h"
  public:
 #line 92 "../lock_server_cache.h"
-  enum lock_state { FREE, LOCKED };
   lock_server_cache();
 #line 94 "../lock_server_cache.h"
   lock_protocol::status stat(lock_protocol::lockid_t, int &);
-  lock_protocol::status acquire(int clt, int seq, lock_protocol::lockid_t lid, int &);
+  lock_protocol::status acquire(std::string, int, int, lock_protocol::lockid_t lid, int &);
+  lock_protocol::status release(std::string host, int port, int seq, lock_protocol::lockid_t lid, int &r);
+
   void revoker();
   void retryer();
 #line 109 "../lock_server_cache.h"

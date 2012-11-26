@@ -13,6 +13,7 @@ class lock_client {
  protected:
   rpcc *cl;
  public:
+  lock_client();
   lock_client(std::string d);
   virtual ~lock_client() {};
   virtual lock_protocol::status acquire(lock_protocol::lockid_t);

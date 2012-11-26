@@ -22,7 +22,7 @@ class lock_protocol {
 #line 25 "../lock_protocol.h"
 class rlock_protocol {
  public:
-  enum xxstatus { OK, RPCERR };
+  enum xxstatus { OK, RPCERR, NOENT };
   typedef int status;
   enum rpc_numbers {
     revoke = 0x8001,

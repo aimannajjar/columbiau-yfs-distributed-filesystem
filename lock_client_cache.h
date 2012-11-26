@@ -6,6 +6,7 @@
 
 #include <string>
 #include <map>
+#include <queue>
 #include "lock_protocol.h"
 #include "rpc.h"
 #include "lock_client.h"
@@ -74,27 +75,49 @@ class lock_release_user {
 // has been received.
 //
 
+struct lock_struct
+{
+  enum lock_state { FREE, LOCKED, ACQUIRING, RELEASING };
+  typedef int state;
+  int lock_state;
+  pthread_mutex_t* mutex; 
+  pthread_cond_t* cond;
+  pthread_t current_owner;
+  bool revoke_requested;
+  int requests; /* number of clients waiting for this lock */
+};
+
+
 #line 79 "../lock_client_cache.h"
 
 #line 98 "../lock_client_cache.h"
 class lock_client_cache : public lock_client {
+protected: 
+  rpcc *cl;
  private:
 #line 103 "../lock_client_cache.h"
   class lock_release_user *lu;
   int rlock_port;
   std::string hostname;
   std::string id;
-  std::map<lock_protocol::lockid_t, std::string> locks_cache;
-
+  pthread_mutex_t locks_cache_m; 
+  std::map<lock_protocol::lockid_t, struct lock_struct*> locks_cache;
+  pthread_mutex_t releaser_m;
+  pthread_cond_t releaser_cond;
+  std::queue<lock_protocol::lockid_t> release_queue;
 #line 143 "../lock_client_cache.h"
  public:
-  enum lock_status { FREE, LOCKED, ACQUIRING, RELEASING }
+  
   static int last_port;
+  lock_client_cache();
   lock_client_cache(std::string xdst, class lock_release_user *l = 0);
   virtual ~lock_client_cache() {};
   lock_protocol::status acquire(lock_protocol::lockid_t);
   virtual lock_protocol::status release(lock_protocol::lockid_t);
   void releaser();
+  rlock_protocol::status retry(int, lock_protocol::lockid_t lid, int&);
+  rlock_protocol::status revoke(int, lock_protocol::lockid_t lid, int&);  
+
 #line 158 "../lock_client_cache.h"
 };
 #line 160 "../lock_client_cache.h"
