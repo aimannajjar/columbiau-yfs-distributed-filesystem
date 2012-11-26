@@ -52,7 +52,7 @@ lock_server_cache::release(std::string host, int port, int seq, lock_protocol::l
   printf("Releasing %llu\n", lid);
   ScopedLock ml(&locks_table_m);
   locks_table[lid].lock_state = lock_server_cache::FREE;
-  locks_table[lid].requests--;
+  
 
   pthread_cond_signal(&retry_cond);
   return lock_protocol::OK;
@@ -61,34 +61,82 @@ lock_server_cache::release(std::string host, int port, int seq, lock_protocol::l
 lock_protocol::status
 lock_server_cache::acquire(std::string host, int port, int seq, lock_protocol::lockid_t lid, int &r)
 {
-  printf("Acquiring %llu\n", lid);
+  printf("client %s acquiring %llu\n", host.c_str(), lid);
   
   ScopedLock ml(&locks_table_m);
   
   if (locks_table.count(lid) == 0 || locks_table[lid].lock_state == lock_server_cache::FREE)
   {
-    struct lock_st lock;
-    locks_table[lid] = lock;
+    if (locks_table.count(lid) == 0)
+    {
+      printf("Lock is new\n");
+      struct lock_st lock;
+      locks_table[lid] = lock;      
+      locks_table[lid].requests = 1;
+    }
+    else
+    {
+      printf("Lock is free\n");
+    }
+    locks_table[lid].requests--;
     locks_table[lid].current_owner = host;
-    locks_table[lid].requests = 1;
     locks_table[lid].lock_state = lock_server_cache::LOCKED;
-    printf("OK\n");
+
+    // remove this request from lock's queue (if it is there)
+    // std::vector<qrequest> q = locks_table[lid].queued_requests;
+    // std::vector<qrequest>::iterator it;
+
+    // for(it = q.begin(); it < q.end(); it++){
+    //   qrequest req = *it;
+    //   if (req.host.compare(host) == 0)
+    //   {
+    //     q.erase(it++);
+    //     printf("removed!!!\n");
+    //     break;
+    //   }
+    // }
+
+    
+
+
+    if (locks_table[lid].requests > 0)
+    {
+      printf("OK NOCACHE (queued requests: %d)\n", locks_table[lid].requests);
+      r = lock_protocol::NOCACHE;
+    }
+    else
+    {
+      printf("OK CACHABLE (queued requests: %d)\n", locks_table[lid].requests);
+      r = lock_protocol::OK;
+    }
+    
     return lock_protocol::OK;
   }
   else
   {
-    locks_table[lid].requests++;
+    // Lock is cached somewhere, wake up revoker and queue request
+    printf("Lock is cached somewhere. RETRY\n");
 
+
+    // Add this client to this lock's queued requests
+    struct qrequest qreq;
+    qreq.host = host;
+    qreq.lid = lid;
+    qreq.seqno = seq;
+
+    locks_table[lid].requests++;
+    locks_table[lid].queued_requests.push(qreq);
+
+    // Add lock to revoker queue and wake the thread
     struct qrequest req;
     req.host = locks_table[lid].current_owner;
     req.lid = lid;
+    req.seqno = seq;
     revoke_queue.push(req);
     pthread_cond_signal(&revoke_cond);
 
-    struct qrequest ret_req;
-    ret_req.host = host;
-    ret_req.lid = lid;
-    retry_list.push_back(ret_req);
+    // Add to retryer queue (but don't wake it now)
+    retry_list.push_back(lid);
 
     return lock_protocol::RETRY;
   }
@@ -109,10 +157,12 @@ lock_server_cache::revoker()
     while (revoke_queue.empty()) 
       assert(pthread_cond_wait(&revoke_cond, &revoke_m) >= 0);
 
+    
     qrequest req = revoke_queue.front();
     revoke_queue.pop();
 
-    printf("Sending revoke to %s\n", req.host.c_str());
+    printf("Sending revoke to %s for acquire with seq: %d\n", req.host.c_str(), req.seqno);
+
 
     sockaddr_in dstsock;
     make_sockaddr(req.host.c_str(), &dstsock);
@@ -123,7 +173,7 @@ lock_server_cache::revoker()
     }
 
     int r;
-    cl.call(rlock_protocol::revoke, cl.id(), req.lid, r);
+    cl.call(rlock_protocol::revoke, cl.id(), req.lid, req.seqno, r);
   }
 
 }
@@ -142,15 +192,20 @@ lock_server_cache::retryer()
     while (retry_list.empty()) 
       assert(pthread_cond_wait(&retry_cond, &retry_m) >= 0);
 
-    std::vector<qrequest>::iterator it;
+    std::vector<lock_protocol::lockid_t>::iterator it;
 
     for(it = retry_list.begin(); it < retry_list.end(); it++){
-      qrequest req = *it;
+      lock_protocol::lockid_t lid = *it;
 
-      if (locks_table[req.lid].lock_state != lock_server_cache::FREE)
+      if (locks_table[lid].lock_state != lock_server_cache::FREE)
         continue;
 
-      printf("Sending retry to %s\n", req.host.c_str());
+      
+      
+
+      printf("Sending retry to %s\n", locks_table[lid].queued_requests.front().host.c_str());
+      qrequest req = locks_table[lid].queued_requests.front();
+      locks_table[lid].queued_requests.pop();
 
       sockaddr_in dstsock;
       make_sockaddr(req.host.c_str(), &dstsock);
@@ -159,10 +214,11 @@ lock_server_cache::retryer()
         printf("lock_client: call bind\n");    
         continue;
       }
+
       retry_list.erase(it++);
 
       int r;
-      cl.call(rlock_protocol::retry, cl.id(), req.lid, r);
+      cl.call(rlock_protocol::retry, cl.id(), lid, req.seqno, r);
     }
       
 

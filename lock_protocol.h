@@ -7,7 +7,7 @@
 
 class lock_protocol {
  public:
-  enum xxstatus { OK, RETRY, RPCERR, NOENT, IOERR };
+  enum xxstatus { OK, RETRY, RPCERR, NOENT, IOERR, NOCACHE };
   typedef int status;
   typedef unsigned long long lockid_t;
 #line 16 "../lock_protocol.h"

@@ -20,6 +20,7 @@
 struct qrequest
 {
     std::string host;
+    int seqno;
     lock_protocol::lockid_t lid;
 };
 
@@ -30,6 +31,7 @@ struct lock_st
   int lock_state;
   std::string current_owner;
   int requests; /* number of clients waiting for this lock */
+  std::queue<qrequest> queued_requests;
 };
 
 
@@ -40,7 +42,7 @@ class lock_server_cache {
  private:
     pthread_mutex_t locks_table_m;
     std::map<lock_protocol::lockid_t, struct lock_st> locks_table;
-    std::vector<qrequest> retry_list;
+    std::vector<lock_protocol::lockid_t> retry_list;
     std::queue<qrequest> revoke_queue;
     pthread_cond_t retry_cond;
     pthread_cond_t revoke_cond;

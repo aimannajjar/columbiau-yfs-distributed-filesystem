@@ -7,6 +7,7 @@
 #include <string>
 #include <map>
 #include <queue>
+#include <list>
 #include "lock_protocol.h"
 #include "rpc.h"
 #include "lock_client.h"
@@ -98,6 +99,8 @@ protected:
 #line 103 "../lock_client_cache.h"
   class lock_release_user *lu;
   int rlock_port;
+  int seqno;
+  int acked_seqno;
   std::string hostname;
   std::string id;
   pthread_mutex_t locks_cache_m; 
@@ -105,6 +108,10 @@ protected:
   pthread_mutex_t releaser_m;
   pthread_cond_t releaser_cond;
   std::queue<lock_protocol::lockid_t> release_queue;
+
+  // std::map<int, struct call> calls;
+  std::list<unsigned int> seq_window;  
+
 #line 143 "../lock_client_cache.h"
  public:
   
@@ -115,8 +122,8 @@ protected:
   lock_protocol::status acquire(lock_protocol::lockid_t);
   virtual lock_protocol::status release(lock_protocol::lockid_t);
   void releaser();
-  rlock_protocol::status retry(int, lock_protocol::lockid_t lid, int&);
-  rlock_protocol::status revoke(int, lock_protocol::lockid_t lid, int&);  
+  rlock_protocol::status retry(int, lock_protocol::lockid_t lid, int , int&);
+  rlock_protocol::status revoke(int, lock_protocol::lockid_t lid, int, int&);  
 
 #line 158 "../lock_client_cache.h"
 };
